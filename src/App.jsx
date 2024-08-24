@@ -4,7 +4,6 @@ import { VideoRoom } from "./components/VideoRoom";
 
 function App() {
   const [joined, setJoined] = useState(false);
-
   return (
     <div className="App">
       <h1>Test-Channel Virtual Call</h1>

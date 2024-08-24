@@ -2,9 +2,8 @@ import AgoraRTC, { createClient } from "agora-rtc-sdk-ng";
 import React, { useEffect, useState } from "react";
 import { VideoPlayer } from "./VideoPlayer";
 
-const APP_ID = "cf344dc2d4644c64b61c1d06e2acebc1";
-const TOKEN =
-  "007eJxTYEid6KTd+6wkePqvtUzBXRwbzlx7u4Dd++aBIJ8v11uE7VQUGJLTjE1MUpKNUkzMTEySzUySzAyTDVMMzFKNEpNTk5INb2w6mtYQyMgwa8VqBkYoBPF5GEJSi0t0nTMS8/JScxgYALtVJEg=";
+const APP_ID = process.env.REACT_APP_APP_ID;
+const TOKEN = process.env.REACT_APP_TOKEN;
 const CHANNEL = "Test-Channel";
 
 AgoraRTC.setLogLevel(3);
@@ -32,7 +31,7 @@ const createAgoraClient = ({ onVideoTrack, onUserDisconnected }) => {
 
   const connect = async () => {
     await waitForConnectionState("DISCONNECTED");
-
+    console.log(TOKEN);
     const uid = await client.join(APP_ID, CHANNEL, TOKEN, null);
 
     client.on("user-published", (user, mediaType) => {
