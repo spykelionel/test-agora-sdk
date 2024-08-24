@@ -119,10 +119,16 @@ export const VideoRoom = () => {
   const [localUid, setLocalUid] = useState(null);
   const [activeUser, setActiveUser] = useState(null);
   const onUserDisconnected = useCallback((user) => {
+    if (activeUser?.uid == user?.uid) {
+      if (users.length > 0) {
+        setActiveUser(users[0]);
+      }
+    }
     setUsers((prevUsers) => prevUsers.filter((u) => u.uid !== user.uid));
   }, []);
 
   const onTrackPublished = useCallback((user, mediaType) => {
+    setActiveUser(user);
     setUsers((prevUsers) => {
       const existingUser = prevUsers.find((u) => u.uid === user.uid);
       if (existingUser) {
@@ -270,6 +276,14 @@ export const VideoRoom = () => {
     }
   }, [users, activeUser]);
 
+  useEffect(() => {
+    console.log(activeUser);
+  }, [activeUser]);
+
+  useEffect(() => {
+    console.log("LocalUid", localUid);
+  }, [localUid]);
+
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* Main video area */}
@@ -286,6 +300,17 @@ export const VideoRoom = () => {
               bottom: 0,
             }}
           >
+            <p
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                zIndex: "2",
+                color: "white",
+              }}
+            >
+              active user: {activeUser?.uid}
+            </p>
             <VideoPlayer user={activeUser} fullWidth />
           </div>
         )}

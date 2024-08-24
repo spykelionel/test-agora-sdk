@@ -47,5 +47,10 @@ export const VideoPlayer = ({ user, fullWidth, small }) => {
         border: "1px solid red",
       };
 
-  return <div ref={ref} style={style}></div>;
+  return (
+    <>
+      <p> user: {user?.uid}</p>
+      <div ref={ref} style={style}></div>
+    </>
+  );
 };
