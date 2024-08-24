@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 
-export const VideoPlayer = ({ user }) => {
+export const VideoPlayer = ({ user, fullWidth, small }) => {
   const ref = useRef();
 
   useEffect(() => {
@@ -8,11 +8,9 @@ export const VideoPlayer = ({ user }) => {
 
     const playTrack = async () => {
       try {
-        // If there's an existing video element, remove it
         if (ref.current.childNodes.length > 0) {
           ref.current.removeChild(ref.current.childNodes[0]);
         }
-        // Play the new track
         await user.videoTrack.play(ref.current);
       } catch (error) {
         console.error("Error playing video track:", error);
@@ -21,18 +19,18 @@ export const VideoPlayer = ({ user }) => {
 
     playTrack();
 
-    // Cleanup function
     return () => {
       if (user.videoTrack) {
         user.videoTrack.stop();
       }
     };
-  }, [user.videoTrack]); // Re-run effect when videoTrack changes
+  }, [user.videoTrack]);
 
-  return (
-    <div
-      ref={ref}
-      style={{ width: "200px", height: "200px", overflow: "hidden" }}
-    ></div>
-  );
+  const style = fullWidth
+    ? { width: "100%", height: "100%", objectFit: "contain" }
+    : small
+    ? { width: "120px", height: "90px", overflow: "hidden" }
+    : { width: "200px", height: "200px", overflow: "hidden" };
+
+  return <div ref={ref} style={style}></div>;
 };

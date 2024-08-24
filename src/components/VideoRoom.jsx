@@ -117,6 +117,7 @@ const agoraClient = createAgoraClient();
 export const VideoRoom = () => {
   const [users, setUsers] = useState([]);
   const [localUid, setLocalUid] = useState(null);
+  const [activeUser, setActiveUser] = useState(null);
 
   const onTrackPublished = useCallback((user, mediaType) => {
     setUsers((prevUsers) => {
@@ -181,6 +182,7 @@ export const VideoRoom = () => {
           user.uid === localUid ? { ...user, videoTrack: screenTrack } : user
         )
       );
+      setActiveUser({ uid: localUid, videoTrack: screenTrack });
     } catch (error) {
       console.error("Failed to start screen share:", error);
     }
@@ -189,13 +191,13 @@ export const VideoRoom = () => {
   const handleStopScreenShare = async () => {
     try {
       await agoraClient.stopScreenShare();
-      setUsers((prevUsers) =>
-        prevUsers.map((user) =>
-          user.uid === localUid
-            ? { ...user, videoTrack: agoraClient.localTracks.videoTrack }
-            : user
-        )
+      const updatedUsers = users.map((user) =>
+        user.uid === localUid
+          ? { ...user, videoTrack: agoraClient.localTracks.videoTrack }
+          : user
       );
+      setUsers(updatedUsers);
+      setActiveUser(updatedUsers.find((user) => user.uid === localUid));
     } catch (error) {
       console.error("Failed to stop screen share:", error);
     }
@@ -205,31 +207,82 @@ export const VideoRoom = () => {
     users.find((user) => user.uid === localUid)?.videoTrack ===
     agoraClient.localTracks.screenTrack;
 
+  const handleUserClick = (user) => {
+    setActiveUser(user);
+  };
+
+  useEffect(() => {
+    if (!activeUser && users.length > 0) {
+      setActiveUser(users[0]);
+    }
+  }, [users, activeUser]);
+
   return (
-    <>
-      <div>User ID: {localUid}</div>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Main video area */}
+      <div
+        style={{ flex: 1, backgroundColor: "#f0f0f0", position: "relative" }}
+      >
+        {activeUser && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          >
+            <VideoPlayer user={activeUser} fullWidth />
+          </div>
+        )}
+      </div>
+
+      {/* Bottom user list */}
       <div
         style={{
+          height: "150px",
+          backgroundColor: "#333",
+          padding: "10px",
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {users.map((user) => (
+          <div
+            key={user.uid}
+            style={{
+              display: "inline-block",
+              marginRight: "10px",
+              cursor: "pointer",
+            }}
+            onClick={() => handleUserClick(user)}
+          >
+            <VideoPlayer user={user} small />
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div
+        style={{
+          padding: "10px",
+          backgroundColor: "#222",
           display: "flex",
           justifyContent: "center",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-          }}
+        <button onClick={handleStartScreenShare} disabled={isScreenSharing}>
+          Start Screen Share
+        </button>
+        <button
+          onClick={handleStopScreenShare}
+          disabled={!isScreenSharing}
+          style={{ marginLeft: "10px" }}
         >
-          {users.map((user) => (
-            <VideoPlayer key={user.uid} user={user} />
-          ))}
-        </div>
+          Stop Screen Share
+        </button>
       </div>
-      <button onClick={handleStartScreenShare} disabled={isScreenSharing}>
-        Start Screen Share
-      </button>
-      <button onClick={handleStopScreenShare} disabled={!isScreenSharing}>
-        Stop Screen Share
-      </button>
-    </>
+    </div>
   );
 };
