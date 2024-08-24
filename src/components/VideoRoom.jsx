@@ -118,23 +118,76 @@ export const VideoRoom = () => {
   const [users, setUsers] = useState([]);
   const [localUid, setLocalUid] = useState(null);
   const [activeUser, setActiveUser] = useState(null);
+  const onUserDisconnected = useCallback((user) => {
+    setUsers((prevUsers) => prevUsers.filter((u) => u.uid !== user.uid));
+  }, []);
 
   const onTrackPublished = useCallback((user, mediaType) => {
     setUsers((prevUsers) => {
       const existingUser = prevUsers.find((u) => u.uid === user.uid);
       if (existingUser) {
         return prevUsers.map((u) =>
-          u.uid === user.uid ? { ...u, [mediaType]: user[mediaType] } : u
+          u.uid === user.uid
+            ? {
+                ...u,
+                [mediaType]: user[mediaType],
+                videoTrack:
+                  mediaType === "video" ? user.videoTrack : u.videoTrack,
+                audioTrack:
+                  mediaType === "audio" ? user.audioTrack : u.audioTrack,
+              }
+            : u
         );
       } else {
-        return [...prevUsers, user];
+        return [
+          ...prevUsers,
+          {
+            uid: user.uid,
+            videoTrack: mediaType === "video" ? user.videoTrack : null,
+            audioTrack: mediaType === "audio" ? user.audioTrack : null,
+          },
+        ];
       }
     });
   }, []);
 
-  const onUserDisconnected = useCallback((user) => {
-    setUsers((prevUsers) => prevUsers.filter((u) => u.uid !== user.uid));
-  }, []);
+  useEffect(() => {
+    const setup = async () => {
+      try {
+        const { uid } = await agoraClient.connect(
+          onTrackPublished,
+          onUserDisconnected
+        );
+        setLocalUid(uid);
+        setUsers((prevUsers) => [
+          ...prevUsers,
+          {
+            uid,
+            audioTrack: agoraClient.localTracks.audioTrack,
+            videoTrack: agoraClient.localTracks.videoTrack,
+          },
+        ]);
+      } catch (error) {
+        console.error("Setup failed:", error);
+      }
+    };
+
+    const cleanup = async () => {
+      try {
+        await agoraClient.disconnect();
+        setLocalUid(null);
+        setUsers([]);
+      } catch (error) {
+        console.error("Cleanup failed:", error);
+      }
+    };
+
+    agoraCommandQueue = agoraCommandQueue.then(setup);
+
+    return () => {
+      agoraCommandQueue = agoraCommandQueue.then(cleanup);
+    };
+  }, [onTrackPublished, onUserDisconnected]);
 
   useEffect(() => {
     const setup = async () => {
