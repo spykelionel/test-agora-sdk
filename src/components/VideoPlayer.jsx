@@ -27,10 +27,25 @@ export const VideoPlayer = ({ user, fullWidth, small }) => {
   }, [user.videoTrack]);
 
   const style = fullWidth
-    ? { width: "100%", height: "100%", objectFit: "contain" }
+    ? {
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",
+        border: "1px solid red",
+      }
     : small
-    ? { width: "120px", height: "90px", overflow: "hidden" }
-    : { width: "200px", height: "200px", overflow: "hidden" };
+    ? {
+        width: "120px",
+        height: "90px",
+        overflow: "hidden",
+        border: "1px solid red",
+      }
+    : {
+        width: "200px",
+        height: "200px",
+        overflow: "hidden",
+        border: "1px solid red",
+      };
 
   return <div ref={ref} style={style}></div>;
 };
