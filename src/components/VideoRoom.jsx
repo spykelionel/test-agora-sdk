@@ -1,5 +1,5 @@
-import AgoraRTC, { createClient } from "agora-rtc-sdk-ng";
-import React, { useEffect, useState } from "react";
+import AgoraRTC from "agora-rtc-sdk-ng";
+import React, { useCallback, useEffect, useState } from "react";
 import { VideoPlayer } from "./VideoPlayer";
 
 const APP_ID = process.env.REACT_APP_APP_ID;
@@ -10,120 +10,176 @@ AgoraRTC.setLogLevel(3);
 
 let agoraCommandQueue = Promise.resolve();
 
-const createAgoraClient = ({ onVideoTrack, onUserDisconnected }) => {
-  const client = createClient({
+const createAgoraClient = () => {
+  const client = AgoraRTC.createClient({
     mode: "rtc",
     codec: "vp8",
   });
 
-  let tracks;
+  let tracks = [];
+  let screenTrack = null;
 
   const waitForConnectionState = (connectionState) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const interval = setInterval(() => {
         if (client.connectionState === connectionState) {
           clearInterval(interval);
           resolve();
         }
       }, 200);
+
+      // Add a timeout to prevent potential memory leaks
+      setTimeout(() => {
+        clearInterval(interval);
+        reject(new Error("Connection state timeout"));
+      }, 10000);
     });
   };
 
-  const connect = async () => {
-    await waitForConnectionState("DISCONNECTED");
-    console.log(TOKEN);
-    const uid = await client.join(APP_ID, CHANNEL, TOKEN, null);
+  const connect = async (onVideoTrack, onUserDisconnected) => {
+    try {
+      await waitForConnectionState("DISCONNECTED");
+      const uid = await client.join(APP_ID, CHANNEL, TOKEN, null);
 
-    client.on("user-published", (user, mediaType) => {
-      client.subscribe(user, mediaType).then(() => {
+      client.on("user-published", async (user, mediaType) => {
+        await client.subscribe(user, mediaType);
         if (mediaType === "video") {
           onVideoTrack(user);
         }
       });
-    });
 
-    client.on("user-left", (user) => {
-      onUserDisconnected(user);
-    });
+      client.on("user-left", onUserDisconnected);
 
-    tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+      tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+      await client.publish(tracks);
 
-    await client.publish(tracks);
+      return { tracks, uid };
+    } catch (error) {
+      console.error("Failed to connect:", error);
+      throw error;
+    }
+  };
 
-    return {
-      tracks,
-      uid,
-    };
+  const startScreenShare = async () => {
+    try {
+      screenTrack = await AgoraRTC.createScreenVideoTrack();
+      await client.publish(screenTrack);
+      return screenTrack;
+    } catch (error) {
+      console.error("Failed to start screen share:", error);
+      throw error;
+    }
+  };
+
+  const stopScreenShare = async () => {
+    if (screenTrack) {
+      await client.unpublish(screenTrack);
+      screenTrack.stop();
+      screenTrack.close();
+      screenTrack = null;
+    }
   };
 
   const disconnect = async () => {
-    await waitForConnectionState("CONNECTED");
-    client.removeAllListeners();
-    for (let track of tracks) {
-      track.stop();
-      track.close();
+    try {
+      await waitForConnectionState("CONNECTED");
+      client.removeAllListeners();
+      for (let track of tracks) {
+        track.stop();
+        track.close();
+      }
+      await client.unpublish(tracks);
+      await client.leave();
+    } catch (error) {
+      console.error("Failed to disconnect:", error);
+      throw error;
     }
-    await client.unpublish(tracks);
-    await client.leave();
   };
 
   return {
-    disconnect,
     connect,
+    disconnect,
+    startScreenShare,
+    stopScreenShare,
   };
 };
+
+const agoraClient = createAgoraClient();
 
 export const VideoRoom = () => {
   const [users, setUsers] = useState([]);
   const [uid, setUid] = useState(null);
+  const [screenTrack, setScreenTrack] = useState(null);
+
+  const onVideoTrack = useCallback((user) => {
+    setUsers((previousUsers) => [...previousUsers, user]);
+  }, []);
+
+  const onUserDisconnected = useCallback((user) => {
+    setUsers((previousUsers) =>
+      previousUsers.filter((u) => u.uid !== user.uid)
+    );
+  }, []);
 
   useEffect(() => {
-    const onVideoTrack = (user) => {
-      setUsers((previousUsers) => [...previousUsers, user]);
-    };
-
-    const onUserDisconnected = (user) => {
-      setUsers((previousUsers) =>
-        previousUsers.filter((u) => u.uid !== user.uid)
-      );
-    };
-
-    const { connect, disconnect } = createAgoraClient({
-      onVideoTrack,
-      onUserDisconnected,
-    });
-
     const setup = async () => {
-      const { tracks, uid } = await connect();
-      setUid(uid);
-      setUsers((previousUsers) => [
-        ...previousUsers,
-        {
-          uid,
-          audioTrack: tracks[0],
-          videoTrack: tracks[1],
-        },
-      ]);
+      try {
+        const { tracks, uid } = await agoraClient.connect(
+          onVideoTrack,
+          onUserDisconnected
+        );
+        setUid(uid);
+        setUsers((previousUsers) => [
+          ...previousUsers,
+          {
+            uid,
+            audioTrack: tracks[0],
+            videoTrack: tracks[1],
+          },
+        ]);
+      } catch (error) {
+        console.error("Setup failed:", error);
+      }
     };
 
     const cleanup = async () => {
-      await disconnect();
-      setUid(null);
-      setUsers([]);
+      try {
+        await agoraClient.disconnect();
+        setUid(null);
+        setUsers([]);
+      } catch (error) {
+        console.error("Cleanup failed:", error);
+      }
     };
 
-    // setup();
     agoraCommandQueue = agoraCommandQueue.then(setup);
 
     return () => {
-      // cleanup();
       agoraCommandQueue = agoraCommandQueue.then(cleanup);
     };
-  }, []);
+  }, [onVideoTrack, onUserDisconnected]);
+
+  const handleStartScreenShare = async () => {
+    try {
+      const track = await agoraClient.startScreenShare();
+      setScreenTrack(track);
+    } catch (error) {
+      console.error("Failed to start screen share:", error);
+    }
+  };
+
+  const handleStopScreenShare = async () => {
+    try {
+      await agoraClient.stopScreenShare();
+      setScreenTrack(null);
+    } catch (error) {
+      console.error("Failed to stop screen share:", error);
+    }
+  };
 
   return (
     <>
-      {uid}
+      <div>User ID: {uid}</div>
       <div
         style={{
           display: "flex",
@@ -141,6 +197,13 @@ export const VideoRoom = () => {
           ))}
         </div>
       </div>
+      {screenTrack && <VideoPlayer user={{ videoTrack: screenTrack }} />}
+      <button onClick={handleStartScreenShare} disabled={!!screenTrack}>
+        Start Screen Share
+      </button>
+      <button onClick={handleStopScreenShare} disabled={!screenTrack}>
+        Stop Screen Share
+      </button>
     </>
   );
 };
