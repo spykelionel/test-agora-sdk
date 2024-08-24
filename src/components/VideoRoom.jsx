@@ -17,7 +17,8 @@ const createAgoraClient = () => {
   });
 
   let tracks = [];
-  let screenTrack = null;
+  let cameraVideoTrack = null;
+  let screenVideoTrack = null;
 
   const waitForConnectionState = (connectionState) => {
     return new Promise((resolve, reject) => {
@@ -28,7 +29,6 @@ const createAgoraClient = () => {
         }
       }, 200);
 
-      // Add a timeout to prevent potential memory leaks
       setTimeout(() => {
         clearInterval(interval);
         reject(new Error("Connection state timeout"));
@@ -50,7 +50,10 @@ const createAgoraClient = () => {
 
       client.on("user-left", onUserDisconnected);
 
-      tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+      const [microphoneTrack, videoTrack] =
+        await AgoraRTC.createMicrophoneAndCameraTracks();
+      cameraVideoTrack = videoTrack;
+      tracks = [microphoneTrack, videoTrack];
       await client.publish(tracks);
 
       return { tracks, uid };
@@ -62,9 +65,14 @@ const createAgoraClient = () => {
 
   const startScreenShare = async () => {
     try {
-      screenTrack = await AgoraRTC.createScreenVideoTrack();
-      await client.publish(screenTrack);
-      return screenTrack;
+      if (cameraVideoTrack) {
+        await client.unpublish(cameraVideoTrack);
+        cameraVideoTrack.stop();
+      }
+
+      screenVideoTrack = await AgoraRTC.createScreenVideoTrack();
+      await client.publish(screenVideoTrack);
+      return screenVideoTrack;
     } catch (error) {
       console.error("Failed to start screen share:", error);
       throw error;
@@ -72,11 +80,14 @@ const createAgoraClient = () => {
   };
 
   const stopScreenShare = async () => {
-    if (screenTrack) {
-      await client.unpublish(screenTrack);
-      screenTrack.stop();
-      screenTrack.close();
-      screenTrack = null;
+    if (screenVideoTrack) {
+      await client.unpublish(screenVideoTrack);
+      screenVideoTrack.stop();
+      screenVideoTrack = null;
+
+      if (cameraVideoTrack) {
+        await client.publish(cameraVideoTrack);
+      }
     }
   };
 
@@ -87,6 +98,10 @@ const createAgoraClient = () => {
       for (let track of tracks) {
         track.stop();
         track.close();
+      }
+      if (screenVideoTrack) {
+        screenVideoTrack.stop();
+        screenVideoTrack.close();
       }
       await client.unpublish(tracks);
       await client.leave();
@@ -188,8 +203,8 @@ export const VideoRoom = () => {
       >
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 400px)",
+            display: "flex",
+            // gridTemplateColumns: "repeat(5, 200px)",
           }}
         >
           {users.map((user) => (
